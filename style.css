@@ -61,6 +61,12 @@ html,body{
   font-size:13px;
   color:#ddd;
 }
+#raceHUD #raceScore{
+  font-size:18px;
+  color:#ff88ff;
+  font-weight:700;
+  margin-top:6px;
+}
 #finishOverlay{
   position:fixed;
   left:0; top:0; right:0; bottom:0;

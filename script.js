@@ -434,6 +434,10 @@ function step(){
     obstacleTimer += dt*1000;
     if (obstacleTimer > baseObstacleInterval){ obstacleTimer = 0; spawnObstacle(); }
 
+    // spawn collectibles
+    collectibleTimer += dt*1000;
+    if (collectibleTimer > COLLECTIBLE_INTERVAL){ collectibleTimer = 0; spawnCollectible(); }
+
     // update obstacles
     for(let i=obstacles.length-1;i>=0;i--){
       const o = obstacles[i];
@@ -442,10 +446,18 @@ function step(){
       if (o.y - o.r > height + 80){ obstacles.splice(i,1); continue; }
     }
 
+    // update collectibles
+    for(let i=collectibles.length-1;i>=0;i--){
+      const c = collectibles[i];
+      c.y += OBSTACLE_SPEED * dtScaled;
+      if (c.y - c.h/2 > height + 80){ collectibles.splice(i,1); continue; }
+    }
+
     // progress
     raceProgress += OBSTACLE_SPEED * dtScaled;
     const pct = Math.min(1, raceProgress / RACE_LENGTH);
     raceProgressEl.textContent = `${Math.floor(pct*100)}% D${Math.floor(difficulty*10)/10}`;
+    raceScoreEl.textContent = `Score: ${raceScore}`;
 
     // check finish
     if (raceProgress >= RACE_LENGTH){ endRace(true); }
@@ -460,10 +472,22 @@ function step(){
       // slow down a bit
       player.vel.mul(0.98);
 
+      // check obstacle collisions
       for(const o of obstacles){
         const dx = o.x - player.pos.x; const dy = o.y - player.pos.y; const d = Math.hypot(dx,dy);
         if (d < o.r + player.r - 2){ // collision
           endRace(false); break;
+        }
+      }
+
+      // check collectible collisions
+      for(let i=collectibles.length-1;i>=0;i--){
+        const c = collectibles[i];
+        if (!c.collected && c.collidesWith(player.pos, player.r)){
+          c.collected = true;
+          raceScore += 10; // 10 points per collectible
+          collectibles.splice(i,1);
+          playCollisionSound(0.3); // soft sound for collection
         }
       }
     }
@@ -544,6 +568,8 @@ function render(){
   // draw obstacles if race
   if (gameState === 'running'){
     for(const o of obstacles) drawObstacle(o);
+    // draw collectibles
+    for(const c of collectibles) c.draw();
   }
 
   // if active slingshot show line
@@ -601,12 +627,16 @@ requestAnimationFrame(step);
 let gameState = 'idle'; // 'idle' | 'running' | 'finished' | 'crashed'
 let player = null; // player ball
 const obstacles = [];
+const collectibles = []; // pink squares to collect for points
 let obstacleTimer = 0;
 let baseObstacleInterval = 700; // ms, will decrease with difficulty
+let collectibleTimer = 0;
+const COLLECTIBLE_INTERVAL = 900; // ms
 const OBSTACLE_SPEED = 260; // px/s relative to screen (downwards)
 const RACE_LENGTH = 4000; // distance to finish in px
 let raceProgress = 0; // px progressed
 let difficulty = 1; // increases as race progresses
+let raceScore = 0; // points earned in race
 
 // Pattern generation
 let patternQueue = []; // upcoming obstacle patterns
@@ -623,6 +653,7 @@ const restartBtn = document.getElementById('restartRace');
 const raceHUD = document.getElementById('raceHUD');
 const raceStatus = document.getElementById('raceStatus');
 const raceProgressEl = document.getElementById('raceProgress');
+const raceScoreEl = document.getElementById('raceScore');
 
 startBtn.addEventListener('click', ()=>{
   if (gameState === 'idle' || gameState === 'finished' || gameState === 'crashed') startRace();
@@ -636,13 +667,16 @@ function startRace(){
   // remove non-player balls to reduce noise
   balls.length = 0;
   obstacles.length = 0;
+  collectibles.length = 0;
   patternQueue.length = 0;
   player = new Ball(width/2, height - 90, 32, '#6ef');
   // small dampening to keep it responsive
   player.mass = 1.0;
   gameState = 'running';
   raceProgress = 0;
+  raceScore = 0;
   obstacleTimer = 0;
+  collectibleTimer = 0;
   difficulty = 1;
   patternType = 0;
   baseObstacleInterval = 700;
@@ -736,6 +770,39 @@ function drawObstacle(o){
   ctx.arc(o.x, o.y, o.r, 0, Math.PI*2);
   ctx.fill();
   ctx.closePath();
+}
+
+class Collectible{
+  constructor(x, y, w=24, h=24){
+    this.x = x;
+    this.y = y;
+    this.w = w;
+    this.h = h;
+    this.color = '#ff88ff'; // pink
+    this.collected = false;
+  }
+  draw(){
+    if (this.collected) return;
+    ctx.fillStyle = this.color;
+    ctx.fillRect(this.x - this.w/2, this.y - this.h/2, this.w, this.h);
+    // glowing border
+    ctx.strokeStyle = '#ffaaff';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(this.x - this.w/2, this.y - this.h/2, this.w, this.h);
+  }
+  collidesWith(ballPos, ballRadius){
+    const closestX = Math.max(this.x - this.w/2, Math.min(ballPos.x, this.x + this.w/2));
+    const closestY = Math.max(this.y - this.h/2, Math.min(ballPos.y, this.y + this.h/2));
+    const dx = ballPos.x - closestX;
+    const dy = ballPos.y - closestY;
+    return (dx*dx + dy*dy) < (ballRadius*ballRadius);
+  }
+}
+
+function spawnCollectible(){
+  const x = Math.random() * (width - 40) + 20;
+  const y = -30;
+  collectibles.push(new Collectible(x, y, 24, 24));
 }
 
 function endRace(success){
