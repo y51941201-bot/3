@@ -304,9 +304,9 @@ canvas.addEventListener('pointermove', (e)=>{
   // If race is running, control player position
   if (gameState === 'running' && player){
     const toward = new Vec(p.x - player.pos.x, p.y - player.pos.y);
-    player.vel.x += toward.x * (PLAYER_FOLLOW_SPEED * 0.02);
-    player.vel.y += toward.y * (PLAYER_FOLLOW_SPEED * 0.02);
-    const maxPlayerSpeed = 900;
+    player.vel.x += toward.x * (PLAYER_FOLLOW_SPEED * 0.06); // increased from 0.02
+    player.vel.y += toward.y * (PLAYER_FOLLOW_SPEED * 0.06);
+    const maxPlayerSpeed = 1400; // increased from 900
     const sp = player.vel.len();
     if (sp > maxPlayerSpeed){ player.vel.mul(maxPlayerSpeed/sp); }
     active.mode = 'racecontrol';
@@ -464,13 +464,21 @@ function step(){
 
     // player-obstacle collisions
     if (player){
+      // apply reduced gravity for player during race (more floaty, easier control)
+      if (gameState === 'running'){
+        player.vel.y += gravity * 0.15 * dtScaled; // reduced gravity for better control
+      }
       // integrate player
       player.pos.x += player.vel.x * dtScaled; player.pos.y += player.vel.y * dtScaled;
       // keep player within screen
       player.pos.x = Math.max(player.r, Math.min(width - player.r, player.pos.x));
       player.pos.y = Math.max(player.r, Math.min(height - player.r, player.pos.y));
-      // slow down a bit
-      player.vel.mul(0.98);
+      // reduced damping in race mode for more responsive feel
+      if (gameState === 'running'){
+        player.vel.mul(0.985); // less damping
+      } else {
+        player.vel.mul(0.98); // normal damping
+      }
 
       // check obstacle collisions
       for(const o of obstacles){
@@ -832,7 +840,7 @@ window.sim = Object.assign(window.sim || {}, { startRace, resetRace, obstacles, 
 
 // --- Modified pointer handling for race control ---
 // when race running, pointer controls player target; reuse active pointer object
-const PLAYER_FOLLOW_SPEED = 12; // higher -> snappier
+const PLAYER_FOLLOW_SPEED = 28; // higher -> snappier
 
 // adjust pointer handlers when race is active
 // pointerdown already sets 'active' object; modify pointermove handler below to move player when gameState==='running'
