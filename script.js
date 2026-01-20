@@ -47,6 +47,78 @@ class Vec{
   normalize(){ const L=this.len()||1; this.x/=L; this.y/=L; return this; }
 }
 
+// Spring constraint
+class Spring{
+  constructor(ballA, ballB, restLen=80, stiffness=0.05){
+    this.ballA = ballA;
+    this.ballB = ballB;
+    this.restLen = restLen;
+    this.k = stiffness;
+  }
+  apply(){
+    const dx = this.ballB.pos.x - this.ballA.pos.x;
+    const dy = this.ballB.pos.y - this.ballA.pos.y;
+    const dist = Math.hypot(dx,dy) || 1;
+    const delta = dist - this.restLen;
+    const force = this.k * delta;
+    const fx = (dx/dist) * force;
+    const fy = (dy/dist) * force;
+    this.ballA.vel.x += fx / this.ballA.mass;
+    this.ballA.vel.y += fy / this.ballA.mass;
+    this.ballB.vel.x -= fx / this.ballB.mass;
+    this.ballB.vel.y -= fy / this.ballB.mass;
+  }
+  draw(){
+    ctx.beginPath();
+    ctx.strokeStyle = 'rgba(100,200,255,0.4)';
+    ctx.lineWidth = 1.5;
+    ctx.moveTo(this.ballA.pos.x, this.ballA.pos.y);
+    ctx.lineTo(this.ballB.pos.x, this.ballB.pos.y);
+    ctx.stroke();
+  }
+}
+
+// Fixed obstacle
+class FixedBody{
+  constructor(x,y,r=28, color='#f88'){
+    this.pos = new Vec(x,y);
+    this.r = r;
+    this.color = color;
+    this.fixed = true;
+  }
+  draw(){
+    ctx.beginPath();
+    ctx.fillStyle = this.color;
+    ctx.arc(this.pos.x, this.pos.y, this.r, 0, Math.PI*2);
+    ctx.fill();
+    // draw X to indicate fixed
+    ctx.strokeStyle = this.color;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(this.pos.x - this.r*0.4, this.pos.y - this.r*0.4);
+    ctx.lineTo(this.pos.x + this.r*0.4, this.pos.y + this.r*0.4);
+    ctx.moveTo(this.pos.x + this.r*0.4, this.pos.y - this.r*0.4);
+    ctx.lineTo(this.pos.x - this.r*0.4, this.pos.y + this.r*0.4);
+    ctx.stroke();
+  }
+}
+
+const springs = [];
+const fixedBodies = [];
+
+function addFixedBody(x,y,r=28){
+  fixedBodies.push(new FixedBody(x,y,r));
+}
+
+function addSpring(ball1, ball2, restLen=80){
+  springs.push(new Spring(ball1, ball2, restLen, 0.06));
+}
+
+// Add some fixed obstacles
+addFixedBody(width*0.2, height*0.3, 32);
+addFixedBody(width*0.8, height*0.5, 28);
+addFixedBody(width*0.5, height*0.7, 25);
+
 // Circle objects
 class Ball{
   constructor(x,y,r=28, color='#58a'){
@@ -56,8 +128,22 @@ class Ball{
     this.mass = r * 0.1;
     this.color = color;
     this.restitution = 0.8; // energy retention on bounce
+    this.trail = [];
   }
   draw(showVectors=false){
+    // draw trail
+    if (trailsOn && this.trail && this.trail.length){
+      for(let i=0;i<this.trail.length;i++){
+        const p = this.trail[i];
+        const alpha = (i+1)/this.trail.length * 0.7;
+        ctx.beginPath();
+        ctx.fillStyle = `rgba(255,255,255,${alpha*0.06})`;
+        ctx.arc(p.x, p.y, Math.max(1, this.r*0.08*(i/this.trail.length)), 0, Math.PI*2);
+        ctx.fill();
+        ctx.closePath();
+      }
+    }
+
     ctx.beginPath();
     ctx.fillStyle = this.color;
     ctx.arc(this.pos.x, this.pos.y, this.r, 0, Math.PI*2);
@@ -69,15 +155,22 @@ class Ball{
       drawArrow(this.pos.x, this.pos.y, this.pos.x + this.vel.x*s, this.pos.y + this.vel.y*s, 'yellow');
     }
   }
-}
+} 
 
 const balls = [];
 function addBall(x=width/2, y=height/2, r=28){
   balls.push(new Ball(x,y,r, `hsl(${Math.random()*360},70%,60%)`));
 }
 
-// Add a few initial balls
-for(let i=0;i<3;i++) addBall(120 + i*80, 150 + i*40, 28 + i*6);
+// Add initial balls
+for(let i=0;i<8;i++) addBall(60 + (i%4)*140, 100 + Math.floor(i/4)*120, 22 + Math.random()*12);
+
+// Connect some balls with springs for physical linkage
+if (balls.length >= 2){
+  addSpring(balls[0], balls[1], 100);
+  addSpring(balls[1], balls[2], 90);
+  addSpring(balls[4], balls[5], 110);
+}
 
 // Physics parameters
 let gravityOn = true;
@@ -86,6 +179,38 @@ let friction = 0.999; // air resistance
 let globalRest = 0.85;
 
 let showVectors = false;
+let trailsOn = true;
+let soundOn = false;
+
+// slow-motion / time scaling
+let timeScale = 1;
+let slowMotionTimer = 0;
+const SLOW_MOTION_THRESHOLD = 1200; // px/s threshold for entering slow-mo
+const SLOW_MOTION_DURATION = 1000; // ms
+const SLOW_MOTION_SCALE = 0.25; // slow-mo speed
+
+
+// audio helpers and toggles
+let audioCtx = null;
+function ensureAudioContext(){ if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
+function playCollisionSound(intensity=0.5){
+  if (!soundOn) return;
+  ensureAudioContext();
+  const ctxA = audioCtx;
+  const o = ctxA.createOscillator();
+  const g = ctxA.createGain();
+  const freq = 220 + Math.min(1400, intensity * 1000);
+  o.type = 'sawtooth';
+  o.frequency.value = freq;
+  const vol = Math.min(0.9, 0.06 + intensity*0.7);
+  g.gain.value = vol;
+  const now = ctxA.currentTime;
+  o.connect(g); g.connect(ctxA.destination);
+  o.start(now);
+  g.gain.setValueAtTime(g.gain.value, now);
+  g.gain.exponentialRampToValueAtTime(0.001, now + 0.06 + intensity*0.12);
+  o.stop(now + 0.08 + intensity*0.12);
+}
 
 ui.toggleGravity.addEventListener('click', ()=>{
   gravityOn = !gravityOn;
@@ -95,6 +220,22 @@ ui.toggleVectors.addEventListener('click', ()=>{
   showVectors = !showVectors;
   ui.toggleVectors.textContent = `Vectors: ${showVectors? 'ON' : 'OFF'}`;
 });
+const toggleSoundBtn = document.getElementById('toggleSound');
+const toggleTrailsBtn = document.getElementById('toggleTrails');
+
+toggleSoundBtn.addEventListener('click', ()=>{
+  soundOn = !soundOn;
+  toggleSoundBtn.textContent = `Sound: ${soundOn? 'ON' : 'OFF'}`;
+  toggleSoundBtn.classList.toggle('active', soundOn);
+  if (soundOn) ensureAudioContext();
+});
+
+toggleTrailsBtn.addEventListener('click', ()=>{
+  trailsOn = !trailsOn;
+  toggleTrailsBtn.textContent = `Trails: ${trailsOn? 'ON' : 'OFF'}`;
+  toggleTrailsBtn.classList.toggle('active', trailsOn);
+});
+
 ui.addBall.addEventListener('click', ()=> addBall(Math.random()*width, Math.random()*height, 24 + Math.random()*22));
 
 // Drawing helper
@@ -125,21 +266,29 @@ canvas.addEventListener('pointerdown', (e)=>{
   canvas.setPointerCapture(e.pointerId);
   const rect = canvas.getBoundingClientRect();
   const p = new Vec(e.clientX - rect.left, e.clientY - rect.top);
+  // ensure audio unlocked on first user gesture if sound is enabled
+  if (soundOn) ensureAudioContext();
 
-  // find topmost ball under pointer
+  // find topmost ball under pointer (for drag) or nearest ball (for click-to-move)
   let hit = null;
+  let nearest = null; let nd = Infinity;
   for(let i=balls.length-1;i>=0;i--){
     const b = balls[i];
-    if (Math.hypot(b.pos.x-p.x, b.pos.y-p.y) <= b.r + 8){ hit = b; break; }
+    const d = Math.hypot(b.pos.x-p.x, b.pos.y-p.y);
+    if (d <= b.r + 8 && !hit){ hit = b; }
+    if (d < nd){ nd = d; nearest = b; }
   }
 
   active = {
     pointerId: e.pointerId,
     startPos: p.copy(),
-    lastPositions: [{p, t:performance.now()}],
+    currentPos: p.copy(),
+    lastPositions: [{p: p.copy(), t:performance.now()}],
     ball: hit,
+    nearestBall: nearest,
     mode: hit? 'candidate' : 'none',
-    slingshotOrigin: hit? hit.pos.copy() : null
+    slingshotOrigin: hit? hit.pos.copy() : null,
+    isClickMode: !hit // if not on ball, enter click-to-move mode
   };
 });
 
@@ -147,30 +296,40 @@ canvas.addEventListener('pointermove', (e)=>{
   if (!active || e.pointerId !== active.pointerId) return;
   const rect = canvas.getBoundingClientRect();
   const p = new Vec(e.clientX - rect.left, e.clientY - rect.top);
+  active.currentPos = p.copy();
   const now = performance.now();
-  active.lastPositions.push({p, t: now});
-  // trim
+  active.lastPositions.push({p: p.copy(), t: now});
   while(active.lastPositions.length>2 && now - active.lastPositions[0].t > MAX_HISTORY_MS) active.lastPositions.shift();
+
+  // If race is running, control player position
+  if (gameState === 'running' && player){
+    const toward = new Vec(p.x - player.pos.x, p.y - player.pos.y);
+    player.vel.x += toward.x * (PLAYER_FOLLOW_SPEED * 0.02);
+    player.vel.y += toward.y * (PLAYER_FOLLOW_SPEED * 0.02);
+    const maxPlayerSpeed = 900;
+    const sp = player.vel.len();
+    if (sp > maxPlayerSpeed){ player.vel.mul(maxPlayerSpeed/sp); }
+    active.mode = 'racecontrol';
+    return;
+  }
+
+  // Click-to-move mode: show line to target
+  if (active.isClickMode && active.nearestBall && active.mode === 'none'){
+    active.mode = 'clickmove';
+  }
 
   if (active.ball){
     const b = active.ball;
     const dist = Math.hypot(p.x - active.startPos.x, p.y - active.startPos.y);
-    // Decide mode: if pointer pulled backwards from ball center by some threshold -> slingshot
     const pullVec = new Vec(p.x - active.slingshotOrigin.x, p.y - active.slingshotOrigin.y);
     if (pullVec.len() > 12) active.mode = 'slingshot';
     else active.mode = 'dragforce';
 
     if (active.mode === 'dragforce'){
-      // apply spring-like force towards pointer for smooth dragging
       const toward = new Vec(p.x - b.pos.x, p.y - b.pos.y);
-      const K = 8; // spring constant
+      const K = 8;
       b.vel.add(toward.mul(K * (1/60) / Math.max(b.mass,0.1)));
-    } else if (active.mode === 'slingshot'){
-      // do not modify ball position while slingshot - just show line
     }
-  } else {
-    // Not touching a ball: we could start a swipe gesture to throw the nearest ball if fast
-    active.mode = 'swipe';
   }
 });
 
@@ -183,20 +342,26 @@ canvas.addEventListener('pointerup', (e)=>{
   const dt = Math.max((last.t - first.t)/1000, 0.001);
   const v = new Vec((last.p.x - first.p.x)/dt, (last.p.y - first.p.y)/dt);
 
-  if (active.ball){
+  // Click-to-move mode: apply force toward clicked position
+  if (active.isClickMode && active.nearestBall && active.mode === 'clickmove'){
+    const b = active.nearestBall;
+    const toward = new Vec(active.currentPos.x - b.pos.x, active.currentPos.y - b.pos.y);
+    const dist = toward.len();
+    if (dist > 10){
+      toward.normalize();
+      const forceStrength = Math.min(800, dist*2);
+      b.vel.add(new Vec(toward.x*forceStrength, toward.y*forceStrength));
+    }
+  } else if (active.ball){
     const b = active.ball;
     if (active.mode === 'slingshot'){
-      // release with velocity proportional to pull vector (opposite direction to pointer)
       const pull = new Vec(active.slingshotOrigin.x - last.p.x, active.slingshotOrigin.y - last.p.y);
-      const strength = 1.2; // tuning
+      const strength = 1.2;
       b.vel.add(new Vec(pull.x * strength / Math.max(b.mass,1), pull.y * strength / Math.max(b.mass,1)));
     } else {
-      // swipe to throw: add measured pointer velocity
       b.vel = v;
     }
   } else {
-    // If swipe without start on object, find nearest and give it a throw if close
-    // pick nearest ball within some radius of last pointer
     let nearest = null; let nd = Infinity;
     for(const ball of balls){
       const d = Math.hypot(ball.pos.x - last.p.x, ball.pos.y - last.p.y);
@@ -205,7 +370,6 @@ canvas.addEventListener('pointerup', (e)=>{
     if (nearest && nd < 140){ nearest.vel.add(v); }
   }
 
-  // release
   try{ canvas.releasePointerCapture(active.pointerId); }catch(err){}
   active = null;
 });
@@ -220,23 +384,117 @@ function step(){
   lastFrame = now;
   if (dt > 0.05) dt = 0.05;
 
+  // handle slow-motion timer
+  if (slowMotionTimer > 0){
+    slowMotionTimer -= dt*1000;
+    if (slowMotionTimer <= 0){ timeScale = 1; slowMotionTimer = 0; }
+  }
+  const dtScaled = dt * timeScale;
+
   for(const b of balls){
     // gravity
-    if (gravityOn) b.vel.y += gravity * dt;
+    if (gravityOn) b.vel.y += gravity * dtScaled;
     // integrate
-    b.pos.x += b.vel.x * dt;
-    b.pos.y += b.vel.y * dt;
+    b.pos.x += b.vel.x * dtScaled;
+    b.pos.y += b.vel.y * dtScaled;
     // air drag
-    b.vel.x *= Math.pow(friction, dt*60);
-    b.vel.y *= Math.pow(friction, dt*60);
+    b.vel.x *= Math.pow(friction, dtScaled*60);
+    b.vel.y *= Math.pow(friction, dtScaled*60);
+
+    // trail update
+    if (trailsOn){
+      b.trail.unshift({x: b.pos.x, y: b.pos.y, t: now});
+      if (b.trail.length > 18) b.trail.length = 18;
+    } else {
+      b.trail.length = 0;
+    }
+
+    // detect high-speed entry to slow-motion
+    const speed = Math.hypot(b.vel.x, b.vel.y);
+    if (speed > SLOW_MOTION_THRESHOLD && slowMotionTimer <= 0){
+      slowMotionTimer = SLOW_MOTION_DURATION;
+      timeScale = SLOW_MOTION_SCALE;
+      console.log('Entering slow motion for high-speed throw');
+    }
+
     // edge collisions
-    if (b.pos.x - b.r < 0){ b.pos.x = b.r; b.vel.x = -b.vel.x * b.restitution * globalRest; }
-    if (b.pos.x + b.r > width){ b.pos.x = width - b.r; b.vel.x = -b.vel.x * b.restitution * globalRest; }
-    if (b.pos.y - b.r < 0){ b.pos.y = b.r; b.vel.y = -b.vel.y * b.restitution * globalRest; }
-    if (b.pos.y + b.r > height){ b.pos.y = height - b.r; b.vel.y = -b.vel.y * b.restitution * globalRest; }
+    if (b.pos.x - b.r < 0){ b.pos.x = b.r; b.vel.x = -b.vel.x * b.restitution * globalRest; const impact = Math.hypot(b.vel.x, b.vel.y); playCollisionSound(Math.min(1, impact/1200)); }
+    if (b.pos.x + b.r > width){ b.pos.x = width - b.r; b.vel.x = -b.vel.x * b.restitution * globalRest; const impact = Math.hypot(b.vel.x, b.vel.y); playCollisionSound(Math.min(1, impact/1200)); }
+    if (b.pos.y - b.r < 0){ b.pos.y = b.r; b.vel.y = -b.vel.y * b.restitution * globalRest; const impact = Math.hypot(b.vel.x, b.vel.y); playCollisionSound(Math.min(1, impact/1200)); }
+    if (b.pos.y + b.r > height){ b.pos.y = height - b.r; b.vel.y = -b.vel.y * b.restitution * globalRest; const impact = Math.hypot(b.vel.x, b.vel.y); playCollisionSound(Math.min(1, impact/1200)); }
   }
 
-  // Simple ball-ball collisions (pairwise)
+  // --- Race updates: obstacles, collision with player, progress ---
+  if (gameState === 'running'){
+    // difficulty increases with progress
+    difficulty = 1 + (raceProgress / RACE_LENGTH) * 2; // 1.0 -> 3.0
+    baseObstacleInterval = Math.max(300, 700 - difficulty*80); // faster spawning
+
+    // spawn obstacles
+    obstacleTimer += dt*1000;
+    if (obstacleTimer > baseObstacleInterval){ obstacleTimer = 0; spawnObstacle(); }
+
+    // update obstacles
+    for(let i=obstacles.length-1;i>=0;i--){
+      const o = obstacles[i];
+      o.y += o.vy * dtScaled;
+      // remove if off-screen
+      if (o.y - o.r > height + 80){ obstacles.splice(i,1); continue; }
+    }
+
+    // progress
+    raceProgress += OBSTACLE_SPEED * dtScaled;
+    const pct = Math.min(1, raceProgress / RACE_LENGTH);
+    raceProgressEl.textContent = `${Math.floor(pct*100)}% D${Math.floor(difficulty*10)/10}`;
+
+    // check finish
+    if (raceProgress >= RACE_LENGTH){ endRace(true); }
+
+    // player-obstacle collisions
+    if (player){
+      // integrate player
+      player.pos.x += player.vel.x * dtScaled; player.pos.y += player.vel.y * dtScaled;
+      // keep player within screen
+      player.pos.x = Math.max(player.r, Math.min(width - player.r, player.pos.x));
+      player.pos.y = Math.max(player.r, Math.min(height - player.r, player.pos.y));
+      // slow down a bit
+      player.vel.mul(0.98);
+
+      for(const o of obstacles){
+        const dx = o.x - player.pos.x; const dy = o.y - player.pos.y; const d = Math.hypot(dx,dy);
+        if (d < o.r + player.r - 2){ // collision
+          endRace(false); break;
+        }
+      }
+    }
+  }
+
+
+  // Apply spring constraints
+  for(const spring of springs) spring.apply();
+
+  // Collisions with fixed bodies
+  for(const ball of balls){
+    for(const fixed of fixedBodies){
+      const dx = ball.pos.x - fixed.pos.x;
+      const dy = ball.pos.y - fixed.pos.y;
+      const dist = Math.hypot(dx,dy) || 1;
+      const minD = ball.r + fixed.r;
+      if (dist < minD){
+        // push ball away from fixed
+        const overlap = minD - dist;
+        const nx = dx/dist; const ny = dy/dist;
+        ball.pos.x += nx*overlap; ball.pos.y += ny*overlap;
+        // reflect velocity
+        const rel = ball.vel.x*nx + ball.vel.y*ny;
+        if (rel < 0){
+          ball.vel.x = (ball.vel.x - 2*rel*nx) * 0.8;
+          ball.vel.y = (ball.vel.y - 2*rel*ny) * 0.8;
+        }
+      }
+    }
+  }
+
   for(let i=0;i<balls.length;i++){
     for(let j=i+1;j<balls.length;j++){
       const A=balls[i], B=balls[j];
@@ -260,6 +518,8 @@ function step(){
           const jx = jimp * nx, jy = jimp * ny;
           A.vel.x -= jx / A.mass; A.vel.y -= jy / A.mass;
           B.vel.x += jx / B.mass; B.vel.y += jy / B.mass;
+          // play collision sound proportional to impulse
+          playCollisionSound(Math.min(1, Math.abs(jimp)/1500));
         }
       }
     }
@@ -275,8 +535,19 @@ function render(){
   ctx.fillStyle = '#0b1220';
   ctx.fillRect(0,0,width,height);
 
+  // draw springs
+  for(const spring of springs) spring.draw();
+
+  // draw fixed bodies
+  for(const fb of fixedBodies) fb.draw();
+
+  // draw obstacles if race
+  if (gameState === 'running'){
+    for(const o of obstacles) drawObstacle(o);
+  }
+
   // if active slingshot show line
-  if (active && active.mode === 'slingshot' && active.lastPositions.length){
+  if (active && active.mode === 'slingshot' && active.lastPositions.length && gameState !== 'running'){
     const last = active.lastPositions[active.lastPositions.length-1].p;
     ctx.beginPath();
     ctx.strokeStyle = 'rgba(255,255,255,0.9)';
@@ -290,21 +561,212 @@ function render(){
     drawArrow(active.slingshotOrigin.x, active.slingshotOrigin.y, active.slingshotOrigin.x + pull.x*0.6, active.slingshotOrigin.y + pull.y*0.6,'#ffdd77');
   }
 
+  // click-to-move line
+  if (active && active.mode === 'clickmove' && active.nearestBall){
+    ctx.beginPath();
+    ctx.strokeStyle = 'rgba(100,255,150,0.6)';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([5,5]);
+    ctx.moveTo(active.nearestBall.pos.x, active.nearestBall.pos.y);
+    ctx.lineTo(active.currentPos.x, active.currentPos.y);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.closePath();
+  }
+
+  // draw player if in race
+  if (player) player.draw(showVectors);
+
+  // draw other balls
   for(const b of balls) b.draw(showVectors);
+
+  // HUD
+  const sm = document.getElementById('smIndicator');
+  if (sm) sm.style.display = (slowMotionTimer>0) ? 'inline-block' : 'none';
 }
 
-// Console debug prints (positions & velocities)
+// Console debug prints (positions, velocities & state)
 setInterval(()=>{
   console.clear();
-  console.log(`--- Simulation debug (${balls.length} balls) ---`);
+  console.log(`--- Simulation debug (balls=${balls.length} obstacles=${obstacles.length}) ---`);
   balls.forEach((b,i)=> console.log(`ball ${i}: pos=(${b.pos.x.toFixed(1)},${b.pos.y.toFixed(1)}) vel=(${b.vel.x.toFixed(1)},${b.vel.y.toFixed(1)})`));
+  if (player) console.log(`player: pos=(${player.pos.x.toFixed(1)},${player.pos.y.toFixed(1)}) vel=(${player.vel.x.toFixed(1)},${player.vel.y.toFixed(1)})`);
+  console.log(`sound=${soundOn} trails=${trailsOn} slowMotion=${slowMotionTimer>0} timeScale=${timeScale.toFixed(2)} race=${gameState} progress=${Math.floor(raceProgress)}`);
 }, 1000);
 
 // Kick off
 requestAnimationFrame(step);
 
-// Expose some helpers for debugging from console
-window.sim = {
-  balls, addBall, toggleGravity: ()=>{ gravityOn = !gravityOn; ui.toggleGravity.textContent = `Gravity: ${gravityOn? 'ON' : 'OFF'}`; },
-  toggleVectors: ()=>{ showVectors = !showVectors; ui.toggleVectors.textContent = `Vectors: ${showVectors? 'ON' : 'OFF'}`; }
+// --- Race Mode Variables & helpers ---
+let gameState = 'idle'; // 'idle' | 'running' | 'finished' | 'crashed'
+let player = null; // player ball
+const obstacles = [];
+let obstacleTimer = 0;
+let baseObstacleInterval = 700; // ms, will decrease with difficulty
+const OBSTACLE_SPEED = 260; // px/s relative to screen (downwards)
+const RACE_LENGTH = 4000; // distance to finish in px
+let raceProgress = 0; // px progressed
+let difficulty = 1; // increases as race progresses
+
+// Pattern generation
+let patternQueue = []; // upcoming obstacle patterns
+let patternType = 0; // cycles through different pattern types
+const PATTERN_TYPES = {
+  LANES: 0,        // 2-3 obstacles in fixed lanes with gap
+  ALTERNATING: 1,  // left-right-left pattern
+  SQUEEZE: 2,      // obstacles on sides with narrow gap in middle
+  WALLS: 3         // dense obstacles with single gap
 };
+
+const startBtn = document.getElementById('startRace');
+const restartBtn = document.getElementById('restartRace');
+const raceHUD = document.getElementById('raceHUD');
+const raceStatus = document.getElementById('raceStatus');
+const raceProgressEl = document.getElementById('raceProgress');
+
+startBtn.addEventListener('click', ()=>{
+  if (gameState === 'idle' || gameState === 'finished' || gameState === 'crashed') startRace();
+});
+restartBtn.addEventListener('click', ()=>{
+  resetRace();
+  startRace();
+});
+
+function startRace(){
+  // remove non-player balls to reduce noise
+  balls.length = 0;
+  obstacles.length = 0;
+  patternQueue.length = 0;
+  player = new Ball(width/2, height - 90, 32, '#6ef');
+  // small dampening to keep it responsive
+  player.mass = 1.0;
+  gameState = 'running';
+  raceProgress = 0;
+  obstacleTimer = 0;
+  difficulty = 1;
+  patternType = 0;
+  baseObstacleInterval = 700;
+  startBtn.style.display = 'none';
+  restartBtn.style.display = 'inline-block';
+  raceHUD.style.display = 'block';
+  raceStatus.textContent = 'Racing';
+  setTimeout(()=>{
+    // focus audio unlocking by user gesture
+    if (soundOn) ensureAudioContext();
+  },50);
+}
+
+function resetRace(){
+  gameState = 'idle';
+  player = null;
+  obstacles.length = 0;
+  startBtn.style.display = 'inline-block';
+  restartBtn.style.display = 'none';
+  raceHUD.style.display = 'none';
+  raceStatus.textContent = 'Ready';
+}
+
+// Pattern generation helpers
+function generatePattern(){
+  const pattern = [];
+  const type = patternType % 4;
+  const minGap = 70 + difficulty*15; // safe gap size
+  
+  switch(type){
+    case PATTERN_TYPES.LANES: { // 2-3 obstacles with gaps
+      const numObs = 2 + Math.floor(difficulty*0.5);
+      const spacing = width / (numObs + 1);
+      for(let i=0;i<numObs;i++){
+        pattern.push({ x: spacing * (i+1), r: 14 + Math.random()*8 });
+      }
+      break;
+    }
+    case PATTERN_TYPES.ALTERNATING: { // left-right-left
+      const gap = width * 0.3;
+      pattern.push({ x: width*0.25, r: 16 });
+      pattern.push({ x: width*0.75, r: 16 });
+      break;
+    }
+    case PATTERN_TYPES.SQUEEZE: { // tight sides, safe middle
+      pattern.push({ x: width*0.15, r: 18 });
+      pattern.push({ x: width*0.85, r: 18 });
+      break;
+    }
+    case PATTERN_TYPES.WALLS: { // many small obstacles, one gap
+      const gapPos = 0.3 + Math.random()*0.4; // gap location
+      const obsCount = 3 + Math.floor(difficulty);
+      for(let i=0;i<obsCount;i++){
+        const xNorm = i / obsCount;
+        if (Math.abs(xNorm - gapPos) > 0.12){ // not in gap
+          pattern.push({ x: xNorm * width, r: 10 + Math.random()*6 });
+        }
+      }
+      break;
+    }
+  }
+  
+  patternType++;
+  return pattern;
+}
+
+function spawnObstacle(){
+  // pull from pattern queue, or generate new pattern if empty
+  if (patternQueue.length === 0){
+    const newPattern = generatePattern();
+    patternQueue = newPattern.slice();
+  }
+  
+  if (patternQueue.length === 0) return;
+  const obs = patternQueue.shift();
+  const y = -50;
+  const speed = OBSTACLE_SPEED * (0.95 + Math.random()*0.3) * (1 + (difficulty-1)*0.15);
+  obstacles.push({
+    x: obs.x,
+    y: y,
+    r: obs.r,
+    vx: 0,
+    vy: speed,
+    color: '#f55'
+  });
+}
+
+function drawObstacle(o){
+  ctx.beginPath();
+  ctx.fillStyle = o.color;
+  ctx.arc(o.x, o.y, o.r, 0, Math.PI*2);
+  ctx.fill();
+  ctx.closePath();
+}
+
+function endRace(success){
+  if (success){
+    gameState = 'finished';
+    raceStatus.textContent = 'Finished!';
+    playCollisionSound(0.4);
+    showFinish('You Win!');
+  } else {
+    gameState = 'crashed';
+    raceStatus.textContent = 'Crashed';
+    playCollisionSound(1.0);
+    showFinish('Crashed');
+  }
+}
+
+function showFinish(text){
+  let el = document.getElementById('finishOverlay');
+  if (!el){
+    el = document.createElement('div'); el.id = 'finishOverlay'; el.innerText = text; document.body.appendChild(el);
+  } else { el.innerText = text; el.style.display = 'flex'; }
+  setTimeout(()=>{ if (el) el.style.display = 'none'; }, 1400);
+}
+
+// expose for debugging
+window.sim = Object.assign(window.sim || {}, { startRace, resetRace, obstacles, player });
+
+// --- Modified pointer handling for race control ---
+// when race running, pointer controls player target; reuse active pointer object
+const PLAYER_FOLLOW_SPEED = 12; // higher -> snappier
+
+// adjust pointer handlers when race is active
+// pointerdown already sets 'active' object; modify pointermove handler below to move player when gameState==='running'
+

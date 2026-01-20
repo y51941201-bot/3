@@ -35,12 +35,48 @@ html,body{
   border-radius:6px;
   font-size:14px;
 }
+#ui button.active{
+  background:rgba(255,255,255,0.18);
+  border-color:rgba(255,255,255,0.22);
+}
+#smIndicator{
+  display:inline-block;
+  margin-left:6px;
+  color:#ffcc66;
+  font-weight:700;
+}
+#raceHUD{
+  position:fixed;
+  right:12px;
+  top:12px;
+  color:#fff;
+  text-align:right;
+  z-index:55;
+}
+#raceHUD #raceStatus{
+  font-weight:700;
+  color:#ffeaaa;
+}
+#raceHUD #raceProgress{
+  font-size:13px;
+  color:#ddd;
+}
+#finishOverlay{
+  position:fixed;
+  left:0; top:0; right:0; bottom:0;
+  display:flex; align-items:center; justify-content:center;
+  background:rgba(0,0,0,0.5);
+  z-index:80;
+  color:#fff;
+  font-size:28px;
+  pointer-events:none;
+}
 #ui span#info{
   color:#ddd;
   font-size:13px;
   margin-left:6px;
   opacity:0.9;
-}
+} 
 /* Simple responsive hint at bottom */
 #hint{
   position:fixed;
