@@ -1,30 +1,27 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover" />
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <title>Mobile Physics Simulation</title>
-  <link rel="stylesheet" href="style.css">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Ball Race Game</title>
+    <!-- 引入样式文件 -->
+    <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <div id="ui">
-    <button id="toggleGravity">Gravity: ON</button>
-    <button id="toggleVectors">Vectors: OFF</button>
-    <button id="toggleSound">Sound: ON</button>
-    <button id="toggleTrails">Trails: ON</button>
-    <button id="startRace">Start Race</button>
-    <button id="restartRace" style="display:none">Restart</button>
-    <button id="addBall">Add Ball</button>
-    <span id="info">Drag/Swipe/Slingshot - Works on touch & mouse</span>
-    <span id="smIndicator" style="display:none;margin-left:8px;color:#ffcc66;font-weight:700;">SLOW</span>
-  </div>
-  <div id="raceHUD" style="display:none">
-    <div id="raceStatus">Ready</div>
-    <div id="raceProgress">0%</div>
-    <div id="raceScore">Score: 0</div>
-  </div>
-  <canvas id="canvas"></canvas>
-  <script src="script.js" defer></script>
+
+    <!-- 游戏画布 -->
+    <canvas id="gameCanvas"></canvas>
+
+    <!-- 左上角分数 -->
+    <div id="scoreBoard">Score: 0</div>
+
+    <!-- 游戏结束弹窗 -->
+    <div id="gameOverScreen">
+        <h1>GAME OVER</h1>
+        <p>点击屏幕重新开始</p>
+    </div>
+
+    <!-- 引入脚本文件 -->
+    <script src="script.js"></script>
 </body>
 </html>
