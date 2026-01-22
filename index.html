@@ -3,25 +3,102 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Ball Race Game</title>
-    <!-- 引入样式文件 -->
+    <title>Ball Race & Physics Lab</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
-    <!-- 游戏画布 -->
     <canvas id="gameCanvas"></canvas>
 
-    <!-- 左上角分数 -->
-    <div id="scoreBoard">Score: 0</div>
+    <!-- UI Layer -->
+    <div id="uiLayer">
+        <!-- Top Left: Navigation -->
+        <div id="topLeftBar">
+            <button id="physicsBtn">🧪 Labs</button>
+            <button id="shopBtn">🛒 Skin Shop</button>
+        </div>
 
-    <!-- 游戏结束弹窗 -->
-    <div id="gameOverScreen">
-        <h1>GAME OVER</h1>
-        <p>点击屏幕重新开始</p>
+        <!-- Top Right: Rules -->
+        <button id="rulesBtn">📜 Rules</button>
+
+        <!-- Bottom Left: Hard Restart -->
+        <button id="hardRestartBtn">🔄 Restart Race</button>
+
+        <!-- Score & Timer (Center Top) -->
+        <div id="infoPanel">
+            <div id="scoreBoard">Score: 0</div>
+            <div id="timerBoard">Time: 20s</div>
+        </div>
+
+        <!-- Physics Menu -->
+        <div id="physicsMenu">
+            <h2>Physics Labs</h2>
+            <div class="menu-grid">
+                <button class="menu-btn special-btn" onclick="startDemo('basketball')">
+                    🏀 Basketball<br><span>(Throw to Shoot)</span>
+                </button>
+                <button class="menu-btn" onclick="startDemo('spring')">
+                    🌀 Spring Mass<br><span>(Hooke's Law)</span>
+                </button>
+            </div>
+            <button class="menu-btn back-btn" onclick="backToRace()">🔙 Back to Race</button>
+        </div>
+
+        <!-- Physics Controls (Bottom Center) -->
+        <div id="demoControls">
+            
+            <!-- Basketball Controls -->
+            <div id="ctrl-basketball" class="control-group" style="display:none;">
+                <span id="basketScore" style="color:#fab1a0; font-weight:bold;">Hoops: 0</span>
+            </div>
+
+            <!-- Spring Controls -->
+            <div id="ctrl-spring" class="control-group" style="display:none;">
+                <label>Spring ($k$): <span id="springVal">0.1</span></label>
+                <input type="range" id="springSlider" min="1" max="50" value="10">
+                <div style="margin-top:10px;">
+                    <button id="surfaceBtn" onclick="toggleSurface()">Surface: Smooth (Ice)</button>
+                </div>
+            </div>
+            
+            <div id="demoInstruction"></div>
+        </div>
+
+        <button id="backToMenuBtn" onclick="openPhysicsMenu()">↩ Menu</button>
+
+        <!-- Shop Modal -->
+        <div id="shopModal" class="modal">
+            <h2>🛒 Skin Shop</h2>
+            <p class="modal-subtitle">Spend score to buy skins.<br>Resets when you click "Restart Race".</p>
+            <div id="shopGrid"></div>
+            <button class="close-btn" onclick="closeShop()">Close</button>
+        </div>
+
+        <!-- Rules Modal -->
+        <div id="rulesModal" class="modal">
+            <h2>📜 Game Rules</h2>
+            <div class="rules-content">
+                <p><strong>🏁 The Race:</strong> Avoid Red Balls! <strong>Hit Red = Game Over.</strong></p>
+                <p><strong>🏀 Basketball:</strong> Drag the ball towards the hoop to throw it.</p>
+                <p><strong>🌀 Spring Lab:</strong> Drag the block to oscillate. Change friction and spring stiffness ($k$).</p>
+                <p><strong>⚠️ Restart:</strong> Bottom-left button resets Score & Inventory.</p>
+            </div>
+            <button class="close-btn" onclick="closeRules()">Got it!</button>
+        </div>
+
+        <!-- Round Over Modal -->
+        <div id="roundOverModal" class="modal">
+            <h1 id="roundTitle">TIME'S UP!</h1>
+            <p id="finalScore">Final Score: 0</p>
+            <div class="modal-actions">
+                <button onclick="openShop()">🛒 Go Shopping</button>
+                <button onclick="openPhysicsMenu()">🧪 Physics Labs</button>
+                <button class="close-btn" onclick="closeRoundOver()">👀 Stay Here</button>
+            </div>
+            <p class="modal-subtitle" style="margin-top:10px">Click "Restart Race" to play again.</p>
+        </div>
     </div>
 
-    <!-- 引入脚本文件 -->
     <script src="script.js"></script>
 </body>
 </html>

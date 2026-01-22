@@ -3,59 +3,140 @@ body, html {
     padding: 0;
     width: 100%;
     height: 100%;
-    overflow: hidden; /* 禁止出现滚动条 */
-    background-color: #1a1a1a; /*以此背景色为主 */
-    font-family: Arial, sans-serif;
-    touch-action: none; /* 禁止手机上的默认滑动行为 */
+    overflow: hidden;
+    background-color: #1a1a1a;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    touch-action: none;
+    user-select: none;
 }
 
-canvas {
-    display: block;
-}
+canvas { display: block; }
 
-/* 分数显示 */
-#scoreBoard {
+#uiLayer {
     position: absolute;
-    top: 20px;
-    left: 20px;
-    color: #fff;
-    font-size: 24px;
-    font-weight: bold;
-    pointer-events: none; /* 让鼠标点击穿透过去 */
-    z-index: 10;
-    text-shadow: 1px 1px 2px black;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    pointer-events: none;
 }
 
-/* 游戏结束界面 */
-#gameOverScreen {
-    display: none; /* 默认隐藏 */
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: rgba(0, 0, 0, 0.8);
-    flex-direction: column;
-    justify-content: center;
-    align-items: center;
-    color: white;
-    z-index: 20;
+button, input, .menu-btn {
+    pointer-events: auto;
     cursor: pointer;
+    font-family: inherit;
+    outline: none;
 }
 
-#gameOverScreen h1 {
-    font-size: 40px;
-    color: #ff4444;
-    margin-bottom: 10px;
+/* Navigation Buttons */
+#topLeftBar {
+    position: absolute;
+    top: 20px; left: 20px;
+    z-index: 50;
+    display: flex;
+    gap: 10px;
 }
 
-#gameOverScreen p {
-    font-size: 20px;
-    color: #ccc;
-    animation: blink 1.5s infinite;
+#rulesBtn {
+    position: absolute;
+    top: 20px; right: 20px;
+    z-index: 50;
+    padding: 8px 12px;
+    background: #636e72;
+    color: white;
+    border: none;
+    border-radius: 20px;
+    font-size: 14px;
+    opacity: 0.8;
 }
 
-/* 文字闪烁动画 */
-@keyframes blink {
-    50% { opacity: 0.5; }
+#hardRestartBtn {
+    position: absolute;
+    bottom: 20px; left: 20px;
+    z-index: 50;
+    padding: 10px 15px;
+    background: #d63031;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-weight: bold;
+    box-shadow: 0 4px 0 #b71c1c;
+}
+#hardRestartBtn:active { transform: scale(0.95); }
+
+#physicsBtn, #shopBtn {
+    padding: 10px 15px;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-weight: bold;
+    box-shadow: 0 4px 0 rgba(0,0,0,0.3);
+    transition: transform 0.1s;
+}
+
+#physicsBtn { background: #6c5ce7; }
+#shopBtn { background: #fab1a0; color: #d63031; }
+#physicsBtn:active, #shopBtn:active { transform: scale(0.95); }
+
+/* Info Panel */
+#infoPanel {
+    position: absolute;
+    top: 20px; left: 50%;
+    transform: translateX(-50%);
+    text-align: center;
+    z-index: 10;
+}
+#scoreBoard { color: #fff; font-size: 24px; font-weight: bold; text-shadow: 1px 1px 2px black; }
+#timerBoard { color: #ff9ff3; font-size: 20px; font-weight: bold; text-shadow: 1px 1px 2px black; }
+
+/* Modals */
+.modal {
+    display: none;
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    width: 320px;
+    background: #fff;
+    padding: 20px;
+    border-radius: 15px;
+    z-index: 200;
+    box-shadow: 0 0 20px rgba(0,0,0,0.7);
+    text-align: center;
+    pointer-events: auto;
+}
+.modal-subtitle { font-size: 12px; color: #666; margin-bottom: 10px; }
+.close-btn { background: #636e72; color: white; border: none; padding: 5px 15px; border-radius: 5px; margin-top: 15px;}
+
+#shopGrid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin: 10px 0; }
+.shop-item { background: #eee; padding: 10px; border-radius: 10px; cursor: pointer; border: 2px solid transparent; }
+.shop-item.owned { background: #dff9fb; border-color: #00cec9; }
+.shop-icon { font-size: 25px; display: block; }
+.shop-name { font-size: 10px; font-weight: bold; display: block; }
+.shop-price { font-size: 10px; color: #d63031; font-weight: bold; }
+
+.rules-content { text-align: left; font-size: 14px; color: #333; line-height: 1.5; }
+.rules-content p { margin-bottom: 8px; }
+
+.modal-actions { display: flex; flex-direction: column; gap: 10px; margin-top: 15px; }
+.modal-actions button { padding: 10px; border: none; border-radius: 8px; font-weight: bold; color: white; }
+.modal-actions button:nth-child(1) { background: #fab1a0; color: #d63031; } 
+.modal-actions button:nth-child(2) { background: #6c5ce7; }
+
+/* Physics Menu */
+#physicsMenu {
+    display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(0, 0, 0, 0.95); flex-direction: column; justify-content: center; align-items: center; z-index: 100; pointer-events: auto;
+}
+.menu-grid { display: flex; justify-content: center; margin-bottom: 20px; gap: 15px; }
+.menu-btn { width: 180px; padding: 20px; border-radius: 8px; background: #fff; border:none; box-shadow: 0 4px 0 #ccc; }
+.menu-btn:hover { background: #f0f0f0; } .special-btn { background: #fdcb6e; }
+.back-btn { background: #ff4444; color: white; width: 200px; box-shadow: 0 4px 0 #cc0000; }
+
+#demoControls {
+    position: absolute; bottom: 20px; left: 0; width: 100%; text-align: center; color: white; pointer-events: auto; z-index: 40;
+}
+.control-group { background: rgba(0,0,0,0.6); padding: 10px 20px; border-radius: 20px; display: inline-block; margin-bottom: 10px; }
+#demoInstruction { font-size: 14px; color: #aaa; margin-top: 5px; }
+#surfaceBtn { background: #0984e3; color: white; border: none; padding: 8px 12px; border-radius: 5px; font-size: 12px; cursor: pointer;}
+
+#backToMenuBtn {
+    display: none; position: absolute; top: 20px; right: 20px; padding: 8px 15px; background: #ff4444; color: white; border: none; border-radius: 5px; font-weight: bold; z-index: 60;
 }
